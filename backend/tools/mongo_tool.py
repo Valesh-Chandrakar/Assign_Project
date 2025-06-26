@@ -40,6 +40,10 @@ class MongoQueryTool(BaseTool):
     def _connect(self):
         """Establish MongoDB connection"""
         try:
+            # Close existing connection if any
+            if hasattr(self, 'client') and self.client:
+                self.client.close()
+            
             client = MongoClient(self.connection_string)
             db = client[self.database_name]
             # Test connection
@@ -162,6 +166,17 @@ class MongoQueryTool(BaseTool):
     def _run(self, query: str) -> str:
         """Execute the MongoDB query"""
         try:
+            # Ensure connection is active
+            if not hasattr(self, 'client') or not self.client:
+                self._connect()
+            
+            # Test connection and reconnect if needed
+            try:
+                self.client.admin.command('ping')
+            except:
+                print("🔄 MongoDB connection lost, reconnecting...")
+                self._connect()
+            
             # Determine collection and parse query
             collection_name = self._determine_collection(query)
             collection = self.db[collection_name]
@@ -200,7 +215,9 @@ class MongoQueryTool(BaseTool):
         """Async version of _run"""
         return self._run(query)
     
-    def __del__(self):
-        """Close MongoDB connection when tool is destroyed"""
+    def close_connection(self):
+        """Manually close MongoDB connection if needed"""
         if hasattr(self, 'client') and self.client:
-            self.client.close() 
+            self.client.close()
+            object.__setattr__(self, 'client', None)
+            object.__setattr__(self, 'db', None) 

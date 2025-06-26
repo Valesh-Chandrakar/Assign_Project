@@ -78,6 +78,7 @@ The frontend will start on `http://localhost:5173`
 
 ### 4. Add Sample Data (Optional)
 
+#### MongoDB Sample Data
 ```bash
 cd sample_data
 
@@ -85,6 +86,20 @@ cd sample_data
 # Then run:
 python3 mongodb_sample_data.py
 ```
+
+#### MySQL Database Setup (Optional)
+```bash
+cd sample_data
+
+# Set up MySQL database with schema and sample data
+python3 setup_mysql.py
+```
+
+This will create:
+- Complete database schema for portfolio management
+- Sample data: 15 clients, 16 portfolios, 23 securities
+- Realistic portfolio holdings and transactions
+- Performance data and market history
 
 ## 🔑 Getting Your API Keys
 
@@ -115,13 +130,29 @@ python3 mongodb_sample_data.py
 
 Try these natural language queries:
 
+#### MongoDB Queries (Client Data)
+```
+"List clients from New York with investment preferences"
+"Show me high-risk tolerance clients"
+"Find clients aged between 30-50"
+"Show me the distribution of client age groups"
+```
+
+#### MySQL Queries (Portfolio Data)
 ```
 "Show me top 5 clients by equity value"
-"List clients from New York with investment preferences"
 "What are the recent transactions for high-value portfolios?"
 "Compare portfolio performance over the last quarter"
-"Show me the distribution of client age groups"
 "Which sectors have the highest returns this month?"
+"Show me the largest portfolio holdings"
+"List recent dividend transactions"
+```
+
+#### Combined Queries
+```
+"Show me New York clients with portfolios over $1M"
+"Find high-risk clients with technology sector investments"
+"Compare portfolio performance for clients aged 40-60"
 ```
 
 ## 🎯 How It Works

@@ -91,30 +91,33 @@ def create_query_agent():
     
     # Create agent prompt
     prompt = PromptTemplate.from_template(f"""
-    You are a financial data analyst. Answer questions using ONLY the available tools.
+    You are a financial data analyst. Answer questions using the available tools.
 
     CONTEXT: {tool_context}
 
-    RULES:
-    1. ALWAYS use this exact format:
-       Thought: [what you need to do]
-       Action: [exact tool name from list]
-       Action Input: [your query/input]
-    2. After getting tool results, provide Final Answer
-    3. Use tools ONLY from this list: {{tool_names}}
-    4. For SQL queries, use sql_db_query tool
-    5. For client info, use mongodb_query tool
+    CRITICAL RULES:
+    1. Use EXACT format: Thought: [reasoning] Action: [tool] Action Input: [ONLY the input, NO extra text]
+    2. Action Input must contain ONLY the query/input - NO conversational text
+    3. For SQL: Action Input must be pure SQL - no explanations or extra text
+    4. For MongoDB: Action Input must be the search query only
+    5. After tool results, immediately give Final Answer
 
-    EXAMPLES:
-    Question: "Show me top 5 clients"
-    Thought: I need to query the database for top clients by value
+    CORRECT EXAMPLES:
+    Thought: I need to find top clients by portfolio value
     Action: sql_db_query
     Action Input: SELECT client_id, total_value FROM portfolios ORDER BY total_value DESC LIMIT 5
 
-    Question: "Find clients from New York"
-    Thought: I need to search MongoDB for clients in New York
-    Action: mongodb_query  
+    Thought: I need to check the portfolios table structure
+    Action: sql_db_schema
+    Action Input: portfolios
+
+    Thought: I need to find clients in New York
+    Action: mongodb_query
     Action Input: Find clients from New York
+
+    WRONG - DO NOT DO THIS:
+    Action Input: SELECT ... (Please let me know the output)
+    Action Input: portfolios (Please provide schema)
 
     Available tools: {{tools}}
     Tool names: {{tool_names}}
@@ -170,6 +173,8 @@ async def ask_question(request: QueryRequest):
     
     # Simple fallback for common queries to avoid agent parsing issues
     question_lower = request.question.lower()
+    
+    # MongoDB direct queries
     if "clients from new york" in question_lower or "new york clients" in question_lower:
         try:
             mongo_tool = get_mongo_tool()
@@ -181,6 +186,23 @@ async def ask_question(request: QueryRequest):
             )
         except Exception as e:
             print(f"Direct MongoDB query failed: {e}")
+    
+    # SQL direct queries for portfolios
+    if "top" in question_lower and ("client" in question_lower or "portfolio" in question_lower) and "equity" in question_lower:
+        try:
+            mysql_tools = get_mysql_tools()
+            if mysql_tools:
+                # Use the SQL query tool directly
+                sql_tool = next((tool for tool in mysql_tools if "query" in tool.name.lower()), None)
+                if sql_tool:
+                    result = sql_tool._run("SELECT c.name, p.total_value FROM portfolios p JOIN clients c ON p.client_id = c.client_id ORDER BY p.total_value DESC LIMIT 5")
+                    return QueryResponse(
+                        type="table",
+                        data=f"Top 5 Clients by Portfolio Value:\n\n{result}",
+                        metadata={"question": request.question, "method": "direct_sql"}
+                    )
+        except Exception as e:
+            print(f"Direct SQL query failed: {e}")
     
     try:
         # Execute the query using the agent

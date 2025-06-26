@@ -1,6 +1,6 @@
 from langchain.tools import BaseTool
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 import json
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
@@ -28,21 +28,27 @@ class MongoQueryTool(BaseTool):
     """
     args_schema: type = MongoQueryInput
     
-    def __init__(self, connection_string: str, database_name: str = "client_db"):
-        super().__init__()
-        self.connection_string = connection_string
-        self.database_name = database_name
-        self.client = None
-        self.db = None
+    # Use private attributes for internal state
+    _connection_string: str = PrivateAttr()
+    _database_name: str = PrivateAttr()
+    _client: Optional[MongoClient] = PrivateAttr(default=None)
+    _db: Any = PrivateAttr(default=None)
+    
+    def __init__(self, connection_string: str, database_name: str = "client_db", **kwargs):
+        super().__init__(**kwargs)
+        self._connection_string = connection_string
+        self._database_name = database_name
+        self._client = None
+        self._db = None
         self._connect()
     
     def _connect(self):
         """Establish MongoDB connection"""
         try:
-            self.client = MongoClient(self.connection_string)
-            self.db = self.client[self.database_name]
+            self._client = MongoClient(self._connection_string)
+            self._db = self._client[self._database_name]
             # Test connection
-            self.client.admin.command('ping')
+            self._client.admin.command('ping')
             print("✅ MongoDB connection established")
         except Exception as e:
             print(f"❌ MongoDB connection failed: {e}")
@@ -161,7 +167,7 @@ class MongoQueryTool(BaseTool):
         try:
             # Determine collection and parse query
             collection_name = self._determine_collection(query)
-            collection = self.db[collection_name]
+            collection = self._db[collection_name]
             
             # Convert natural language to MongoDB query
             mongo_query = self._parse_query_to_mongo(query)
@@ -199,5 +205,5 @@ class MongoQueryTool(BaseTool):
     
     def __del__(self):
         """Close MongoDB connection when tool is destroyed"""
-        if self.client:
-            self.client.close() 
+        if hasattr(self, '_client') and self._client:
+            self._client.close() 

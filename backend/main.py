@@ -51,10 +51,19 @@ def get_llm():
 
 # Initialize MySQL connection
 def get_mysql_tools():
-    mysql_uri = os.getenv("MYSQL_URI", "mysql+pymysql://user:password@localhost/portfolio_db")
-    db = SQLDatabase.from_uri(mysql_uri)
-    toolkit = SQLDatabaseToolkit(db=db, llm=get_llm())
-    return toolkit.get_tools()
+    mysql_uri = os.getenv("MYSQL_URI")
+    if not mysql_uri:
+        print("⚠️  MYSQL_URI not configured, skipping SQL tools")
+        return []
+    
+    try:
+        db = SQLDatabase.from_uri(mysql_uri)
+        toolkit = SQLDatabaseToolkit(db=db, llm=get_llm())
+        print("✅ MySQL tools initialized")
+        return toolkit.get_tools()
+    except Exception as e:
+        print(f"⚠️  MySQL connection failed, skipping SQL tools: {e}")
+        return []
 
 # Initialize MongoDB tool
 def get_mongo_tool():
@@ -72,28 +81,37 @@ def create_query_agent():
     mysql_tools = get_mysql_tools()
     mongo_tool = get_mongo_tool()
     
-    tools = mysql_tools + [mongo_tool]
+    tools = [mongo_tool] + mysql_tools
+    
+    # Update prompt based on available tools
+    if not mysql_tools:
+        tool_context = "You only have access to MongoDB for client data. For portfolio-related questions, explain that portfolio data is not currently available."
+    else:
+        tool_context = "You have access to both MongoDB (client data) and MySQL (portfolio data)."
     
     # Create agent prompt
-    prompt = PromptTemplate.from_template("""
-    You are a financial data analyst assistant. You have access to two databases:
-    1. MySQL database containing portfolio and transaction data
-    2. MongoDB database containing client metadata and profiles
-    
-    When answering questions:
-    - For portfolio performance, transactions, equity values: use SQL database tools
-    - For client information, demographics, profiles: use MongoDB tool
-    - Always format your response to indicate if it should be displayed as text, table, or chart
-    - For numerical comparisons or rankings, suggest chart visualization
-    - For detailed records, suggest table format
-    - For summaries and explanations, use text format
-    
-    Available tools: {tools}
-    Tool names: {tool_names}
-    
-    Question: {input}
-    
-    {agent_scratchpad}
+    prompt = PromptTemplate.from_template(f"""
+    You are a financial data analyst assistant. Answer the user's question using the available tools.
+
+    CONTEXT: {tool_context}
+
+    TOOL SELECTION:
+    - Use mongodb_query for: client info, demographics, locations, risk profiles
+    - Use SQL tools for: portfolio values, transactions, holdings, performance
+
+    INSTRUCTIONS:
+    1. Choose the RIGHT tool for the question
+    2. Use the tool ONCE with a clear query
+    3. Format the response based on the data returned
+    4. If no data found, say so clearly
+    5. Be concise and direct
+
+    Available tools: {{tools}}
+    Tool names: {{tool_names}}
+
+    Question: {{input}}
+
+    {{agent_scratchpad}}
     """)
     
     agent = create_react_agent(llm, tools, prompt)
@@ -102,7 +120,9 @@ def create_query_agent():
         tools=tools, 
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=3
+        max_iterations=5,
+        max_execution_time=30,
+        early_stopping_method="generate"
     )
     
     return agent_executor
@@ -142,6 +162,10 @@ async def ask_question(request: QueryRequest):
         # Execute the query using the agent
         result = agent_executor.invoke({"input": request.question})
         
+        # Check if agent completed successfully
+        if "output" not in result:
+            raise HTTPException(status_code=500, detail="Agent failed to generate response")
+        
         # Format the response
         formatter = ResponseFormatter()
         formatted_response = formatter.format_response(
@@ -151,7 +175,17 @@ async def ask_question(request: QueryRequest):
         
         return QueryResponse(**formatted_response)
         
+    except ValueError as e:
+        if "Agent stopped due to iteration limit" in str(e):
+            return QueryResponse(
+                type="text",
+                data="I'm having trouble processing this query. Could you try rephrasing it or being more specific? For example: 'Show me clients from New York' or 'List top 5 portfolios by value'",
+                metadata={"error": "iteration_limit", "question": request.question}
+            )
+        else:
+            raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
     except Exception as e:
+        print(f"Query execution error: {e}")
         raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")
 
 @app.get("/examples")

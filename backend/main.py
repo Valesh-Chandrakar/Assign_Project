@@ -206,6 +206,29 @@ async def ask_question(request: QueryRequest):
         except Exception as e:
             print(f"Direct age distribution query failed: {e}")
     
+    # Top relationship managers queries
+    if "top" in question_lower and ("relationship manager" in question_lower or "manager" in question_lower):
+        try:
+            mongo_tool = get_mongo_tool()
+            result = mongo_tool._run("Get top relationship managers by portfolio value")
+            
+            # Format the response using ResponseFormatter
+            formatter = ResponseFormatter()
+            formatted_response = formatter.format_response(
+                question=request.question,
+                agent_output=result
+            )
+            
+            return QueryResponse(**formatted_response)
+        except Exception as e:
+            print(f"Direct top relationship managers query failed: {e}")
+            # Fallback message if no relationship manager data
+            return QueryResponse(
+                type="text",
+                data="Relationship manager data is not currently available. To add this data, run:\n\n`cd sample_data && python3 update_mongodb_relationship_managers.py`\n\nThis will assign relationship managers to all clients based on their account values and specialties.",
+                metadata={"question": request.question, "method": "direct_fallback", "suggestion": True}
+            )
+    
     # SQL direct queries for portfolios
     if "top" in question_lower and ("client" in question_lower or "portfolio" in question_lower) and "equity" in question_lower:
         try:

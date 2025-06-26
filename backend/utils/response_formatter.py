@@ -41,7 +41,7 @@ class ResponseFormatter:
             return "table"
         
         # Check for structured data patterns (always table)
-        has_structured_data = bool(re.search(r'Name:|Age:|Value:|Record \d+|--- Record', output))
+        has_structured_data = bool(re.search(r'Name:|Age:|Value:|Record \d+|--- Record|--- Manager|--- Rank', output))
         if has_structured_data:
             return "table"
         
@@ -144,7 +144,7 @@ class ResponseFormatter:
                 return rows
         
         # Pattern 1: Record-based format (MongoDB style)
-        record_pattern = r'--- Record \d+ ---\n(.*?)(?=--- Record \d+ ---|$)'
+        record_pattern = r'--- (?:Record|Manager|Rank) \d+ ---\n(.*?)(?=--- (?:Record|Manager|Rank) \d+ ---|$)'
         records = re.findall(record_pattern, output, re.DOTALL)
         
         if records:

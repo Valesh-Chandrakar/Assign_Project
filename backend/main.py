@@ -248,6 +248,27 @@ async def ask_question(request: QueryRequest):
         except Exception as e:
             print(f"Direct SQL performance query failed: {e}")
     
+    # SQL direct queries for top portfolios (general)
+    if "top" in question_lower and ("portfolio" in question_lower or "wealth" in question_lower) and not "performance" in question_lower:
+        try:
+            mysql_tools = get_mysql_tools()
+            if mysql_tools:
+                # Use the SQL query tool directly
+                sql_tool = next((tool for tool in mysql_tools if "query" in tool.name.lower()), None)
+                if sql_tool:
+                    result = sql_tool._run("SELECT p.portfolio_id, p.portfolio_name, p.total_value FROM portfolios p ORDER BY p.total_value DESC LIMIT 5")
+                    
+                    # Format the response using ResponseFormatter
+                    formatter = ResponseFormatter()
+                    formatted_response = formatter.format_response(
+                        question=request.question,
+                        agent_output=result
+                    )
+                    
+                    return QueryResponse(**formatted_response)
+        except Exception as e:
+            print(f"Direct SQL top portfolios query failed: {e}")
+    
     try:
         # Execute the query using the agent
         result = agent_executor.invoke({"input": request.question})

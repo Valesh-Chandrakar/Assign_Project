@@ -269,6 +269,34 @@ async def ask_question(request: QueryRequest):
         except Exception as e:
             print(f"Direct SQL top portfolios query failed: {e}")
     
+    # Portfolio breakup queries (relationship manager, etc.)
+    if "breakup" in question_lower or "breakdown" in question_lower:
+        if "relationship manager" in question_lower or "manager" in question_lower:
+            # Relationship manager data not available, suggest alternatives
+            return QueryResponse(
+                type="text",
+                data="Relationship manager data is not currently available in the database. However, I can provide portfolio breakdowns by:\n\n• Portfolio Type (Individual, Joint, Corporate, Trust, IRA, 401k)\n• Client Location (City/State)\n• Portfolio Size Ranges\n• Client Risk Profile\n\nWould you like me to show any of these breakdowns instead?",
+                metadata={"question": request.question, "method": "direct_fallback", "suggestion": True}
+            )
+        elif "type" in question_lower or "portfolio type" in question_lower:
+            # Portfolio breakup by type
+            try:
+                mysql_tools = get_mysql_tools()
+                if mysql_tools:
+                    sql_tool = next((tool for tool in mysql_tools if "query" in tool.name.lower()), None)
+                    if sql_tool:
+                        result = sql_tool._run("SELECT portfolio_type, COUNT(*) as portfolio_count, SUM(total_value) as total_value FROM portfolios GROUP BY portfolio_type ORDER BY total_value DESC")
+                        
+                        formatter = ResponseFormatter()
+                        formatted_response = formatter.format_response(
+                            question=request.question,
+                            agent_output=result
+                        )
+                        
+                        return QueryResponse(**formatted_response)
+            except Exception as e:
+                print(f"Direct SQL portfolio type query failed: {e}")
+    
     try:
         # Execute the query using the agent
         result = agent_executor.invoke({"input": request.question})

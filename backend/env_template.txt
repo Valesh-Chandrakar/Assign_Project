@@ -1,0 +1,18 @@
+# Environment Variables Template
+# Copy this file to .env and update with your actual values
+
+# Groq API Configuration
+# Get your API key from: https://console.groq.com/
+GROQ_API_KEY=your_groq_api_key_here
+
+# MongoDB Atlas Configuration  
+# Get your connection string from: https://cloud.mongodb.com/
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/client_db?retryWrites=true&w=majority
+
+# MySQL Configuration (Optional - for portfolio data)
+# If you have a MySQL database for portfolio/transaction data
+MYSQL_URI=mysql+pymysql://username:password@host:3306/portfolio_db
+
+# Development Settings
+DEBUG=True
+ENVIRONMENT=development 

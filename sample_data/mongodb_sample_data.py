@@ -8,9 +8,10 @@ from pymongo import MongoClient
 from datetime import datetime, timedelta
 import random
 
-# MongoDB connection - replace with your actual connection string
-MONGODB_URI = "mongodb+srv://username:password@cluster.mongodb.net/client_db?retryWrites=true&w=majority"
+# MongoDB connection - will use from environment variables
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://username:password@cluster.mongodb.net/client_db?retryWrites=true&w=majority")
 DATABASE_NAME = "client_db"
+COLLECTION_NAME = "clients"
 
 def generate_sample_clients():
     """Generate sample client data"""
@@ -88,59 +89,103 @@ def generate_sample_clients():
     return clients
 
 def populate_mongodb():
-    """Populate MongoDB with sample data"""
+    """Create database, collection and populate MongoDB with sample data"""
     try:
-        # Connect to MongoDB
+        # Connect to MongoDB Atlas
+        print("🔌 Connecting to MongoDB Atlas...")
         client = MongoClient(MONGODB_URI)
-        db = client[DATABASE_NAME]
         
         # Test connection
         client.admin.command('ping')
-        print("✅ Connected to MongoDB Atlas")
+        print("✅ Connected to MongoDB Atlas successfully")
+        
+        # Create/access database
+        db = client[DATABASE_NAME]
+        print(f"📁 Using database: {DATABASE_NAME}")
+        
+        # Create/access collection
+        clients_collection = db[COLLECTION_NAME]
+        print(f"📄 Using collection: {COLLECTION_NAME}")
+        
+        # Check if collection exists and has data
+        existing_count = clients_collection.count_documents({})
+        if existing_count > 0:
+            print(f"⚠️  Found {existing_count} existing documents")
+            choice = input("Do you want to replace existing data? (y/N): ").lower()
+            if choice != 'y':
+                print("❌ Aborted. Keeping existing data.")
+                return
+            
+            # Clear existing data
+            clients_collection.delete_many({})
+            print("🗑️  Cleared existing client data")
         
         # Generate and insert sample data
-        clients_collection = db.clients
-        
-        # Clear existing data (optional)
-        clients_collection.delete_many({})
-        print("🗑️  Cleared existing client data")
-        
-        # Insert sample clients
+        print("🔧 Generating sample client data...")
         sample_clients = generate_sample_clients()
-        result = clients_collection.insert_many(sample_clients)
         
+        print("📥 Inserting sample clients...")
+        result = clients_collection.insert_many(sample_clients)
         print(f"✅ Inserted {len(result.inserted_ids)} sample clients")
         
         # Create indexes for better query performance
+        print("🔍 Creating database indexes...")
         clients_collection.create_index("client_id")
         clients_collection.create_index("name")
         clients_collection.create_index("address.city")
         clients_collection.create_index("account_value")
         clients_collection.create_index("risk_profile.tolerance")
-        
         print("✅ Created database indexes")
         
-        # Print some sample data
+        # Show database info
+        print(f"\n📋 Database Details:")
+        print(f"   Database: {DATABASE_NAME}")
+        print(f"   Collection: {COLLECTION_NAME}")
+        print(f"   Documents: {clients_collection.count_documents({})}")
+        
+        # Print sample data preview
         print("\n📊 Sample data preview:")
-        for client in clients_collection.find().limit(3):
-            print(f"- {client['name']} ({client['address']['city']}, {client['address']['state']}) - ${client['account_value']:,}")
+        for i, client in enumerate(clients_collection.find().limit(5), 1):
+            print(f"{i}. {client['name']} ({client['address']['city']}, {client['address']['state']}) - ${client['account_value']:,} - Risk: {client['risk_profile']['tolerance']}")
+        
+        # Show available cities for testing
+        cities = clients_collection.distinct("address.city")
+        print(f"\n🏙️  Available cities for testing: {', '.join(cities[:10])}")
         
         client.close()
-        print("\n🎉 Sample data setup complete!")
+        print("\n🎉 MongoDB setup complete!")
+        print("\n💡 You can now test queries like:")
+        print("   - 'Find clients from New York'")
+        print("   - 'Show me high-risk tolerance clients'")
+        print("   - 'List clients aged between 30-50'")
         
     except Exception as e:
-        print(f"❌ Error setting up sample data: {e}")
+        print(f"❌ Error setting up MongoDB: {e}")
+        print("Please check your MONGODB_URI in the .env file")
 
 if __name__ == "__main__":
-    print("🔧 Setting up MongoDB sample data...")
-    print("📝 Make sure to update MONGODB_URI with your actual connection string")
+    print("🔧 MongoDB Database Setup for LangChain Financial Assistant")
+    print("=" * 60)
     
-    # Auto-run if MONGODB_URI is set in environment
+    # Check if MONGODB_URI is set in environment
     mongodb_uri = os.getenv("MONGODB_URI")
-    if mongodb_uri and mongodb_uri != "mongodb+srv://username:password@cluster.mongodb.net/client_db?retryWrites=true&w=majority":
-        populate_mongodb()
-    else:
-        print("\n⚠️  To run this script:")
-        print("1. Set MONGODB_URI environment variable with your connection string")
-        print("2. Or uncomment the populate_mongodb() call and update MONGODB_URI")
-        print("3. Run: python3 mongodb_sample_data.py") 
+    if not mongodb_uri:
+        print("❌ MONGODB_URI environment variable not found")
+        print("\n📋 To set up MongoDB:")
+        print("1. Make sure your backend/.env file has MONGODB_URI")
+        print("2. Or set: export MONGODB_URI='your_connection_string'")
+        print("3. Run this script again")
+        exit(1)
+    
+    if mongodb_uri == "mongodb+srv://username:password@cluster.mongodb.net/client_db?retryWrites=true&w=majority":
+        print("❌ MONGODB_URI is still using placeholder values")
+        print("Please update it with your actual MongoDB Atlas connection string")
+        exit(1)
+    
+    print(f"✅ Found MONGODB_URI in environment")
+    print(f"🎯 Target database: {DATABASE_NAME}")
+    print(f"🎯 Target collection: {COLLECTION_NAME}")
+    print()
+    
+    # Run the setup
+    populate_mongodb() 

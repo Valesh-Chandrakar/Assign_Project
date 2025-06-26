@@ -273,6 +273,8 @@ class ResponseFormatter:
                             formatted_value = f"{float(value) * 100:.2f}%"
                         elif isinstance(value, (Decimal, float)) and "Value" in column_name:
                             formatted_value = f"${float(value):,.2f}"
+                        elif isinstance(value, (int, Decimal)) and "Count" in column_name:
+                            formatted_value = f"{int(value):,}"
                         elif isinstance(value, (Decimal, float)):
                             formatted_value = f"{float(value):,.2f}"
                         elif isinstance(value, (date, datetime)):

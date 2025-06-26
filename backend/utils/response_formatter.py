@@ -235,16 +235,22 @@ class ResponseFormatter:
                         "Low Price", "Close Price", "Volume", "Adjusted Close", "Created At"
                     ]
                 elif len(data_tuples[0]) == 3:
-                    # Check if it's performance or value query based on data types
-                    # If third column is < 1, it's likely a return (percentage)
-                    # If third column is > 1000, it's likely a value (dollars)
-                    sample_third_value = float(data_tuples[0][2]) if data_tuples[0][2] is not None else 0
-                    if sample_third_value < 1:
-                        # Portfolio performance query: portfolio_id, portfolio_name, cumulative_return
-                        columns = ["Portfolio ID", "Portfolio Name", "Cumulative Return"]
+                    # Check the type of query based on the first column
+                    first_value = data_tuples[0][0]
+                    if isinstance(first_value, str) and any(ptype in str(first_value) for ptype in ['Individual', 'Joint', 'Corporate', 'Trust', 'IRA']):
+                        # Portfolio type breakdown: portfolio_type, portfolio_count, total_value
+                        columns = ["Portfolio Type", "Portfolio Count", "Total Value"]
                     else:
-                        # Portfolio value query: portfolio_id, portfolio_name, total_value
-                        columns = ["Portfolio ID", "Portfolio Name", "Total Value"]
+                        # Check if it's performance or value query based on data types
+                        # If third column is < 1, it's likely a return (percentage)
+                        # If third column is > 1000, it's likely a value (dollars)
+                        sample_third_value = float(data_tuples[0][2]) if data_tuples[0][2] is not None else 0
+                        if sample_third_value < 1:
+                            # Portfolio performance query: portfolio_id, portfolio_name, cumulative_return
+                            columns = ["Portfolio ID", "Portfolio Name", "Cumulative Return"]
+                        else:
+                            # Portfolio value query: portfolio_id, portfolio_name, total_value
+                            columns = ["Portfolio ID", "Portfolio Name", "Total Value"]
                 elif len(data_tuples[0]) == 2:
                     # Client value query: name, total_value
                     columns = ["Client Name", "Total Value"]

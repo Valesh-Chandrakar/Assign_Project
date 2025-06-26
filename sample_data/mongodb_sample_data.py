@@ -135,10 +135,12 @@ if __name__ == "__main__":
     print("🔧 Setting up MongoDB sample data...")
     print("📝 Make sure to update MONGODB_URI with your actual connection string")
     
-    # Uncomment the line below to run the data population
-    # populate_mongodb()
-    
-    print("\n⚠️  To run this script:")
-    print("1. Update MONGODB_URI with your MongoDB Atlas connection string")
-    print("2. Uncomment the populate_mongodb() call")
-    print("3. Run: python3 mongodb_sample_data.py") 
+    # Auto-run if MONGODB_URI is set in environment
+    mongodb_uri = os.getenv("MONGODB_URI")
+    if mongodb_uri and mongodb_uri != "mongodb+srv://username:password@cluster.mongodb.net/client_db?retryWrites=true&w=majority":
+        populate_mongodb()
+    else:
+        print("\n⚠️  To run this script:")
+        print("1. Set MONGODB_URI environment variable with your connection string")
+        print("2. Or uncomment the populate_mongodb() call and update MONGODB_URI")
+        print("3. Run: python3 mongodb_sample_data.py") 

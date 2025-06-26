@@ -223,6 +223,12 @@ class ResponseFormatter:
                         "ID", "Security ID", "Date", "Open Price", "High Price", 
                         "Low Price", "Close Price", "Volume", "Adjusted Close", "Created At"
                     ]
+                elif len(data_tuples[0]) == 3:
+                    # Portfolio performance query: portfolio_id, portfolio_name, cumulative_return
+                    columns = ["Portfolio ID", "Portfolio Name", "Cumulative Return"]
+                elif len(data_tuples[0]) == 2:
+                    # Client value query: name, total_value
+                    columns = ["Client Name", "Total Value"]
                 else:
                     # Generic column names
                     columns = [f"Column {i+1}" for i in range(len(data_tuples[0]))]
@@ -237,6 +243,10 @@ class ResponseFormatter:
                         if value is None:
                             formatted_value = "N/A"
                         elif isinstance(value, (Decimal, float)) and "Price" in column_name:
+                            formatted_value = f"${float(value):,.2f}"
+                        elif isinstance(value, (Decimal, float)) and "Return" in column_name:
+                            formatted_value = f"{float(value) * 100:.2f}%"
+                        elif isinstance(value, (Decimal, float)) and "Value" in column_name:
                             formatted_value = f"${float(value):,.2f}"
                         elif isinstance(value, (Decimal, float)):
                             formatted_value = f"{float(value):,.2f}"

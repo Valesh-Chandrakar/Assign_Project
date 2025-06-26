@@ -177,11 +177,15 @@ async def ask_question(request: QueryRequest):
         try:
             mongo_tool = get_mongo_tool()
             result = mongo_tool._run("Find clients from New York")
-            return QueryResponse(
-                type="table" if "Record" in result else "text",
-                data=result,
-                metadata={"question": request.question, "method": "direct_mongo"}
+            
+            # Format the response using ResponseFormatter
+            formatter = ResponseFormatter()
+            formatted_response = formatter.format_response(
+                question=request.question,
+                agent_output=result
             )
+            
+            return QueryResponse(**formatted_response)
         except Exception as e:
             print(f"Direct MongoDB query failed: {e}")
     
@@ -190,11 +194,15 @@ async def ask_question(request: QueryRequest):
         try:
             mongo_tool = get_mongo_tool()
             result = mongo_tool._run("Show age distribution of clients")
-            return QueryResponse(
-                type="table" if "Record" in result else "text",
-                data=result,
-                metadata={"question": request.question, "method": "direct_mongo", "suggested_type": "chart"}
+            
+            # Format the response using ResponseFormatter
+            formatter = ResponseFormatter()
+            formatted_response = formatter.format_response(
+                question=request.question,
+                agent_output=result
             )
+            
+            return QueryResponse(**formatted_response)
         except Exception as e:
             print(f"Direct age distribution query failed: {e}")
     
@@ -207,11 +215,15 @@ async def ask_question(request: QueryRequest):
                 sql_tool = next((tool for tool in mysql_tools if "query" in tool.name.lower()), None)
                 if sql_tool:
                     result = sql_tool._run("SELECT c.name, p.total_value FROM portfolios p JOIN clients c ON p.client_id = c.client_id ORDER BY p.total_value DESC LIMIT 5")
-                    return QueryResponse(
-                        type="table",
-                        data=f"Top 5 Clients by Portfolio Value:\n\n{result}",
-                        metadata={"question": request.question, "method": "direct_sql"}
+                    
+                    # Format the response using ResponseFormatter
+                    formatter = ResponseFormatter()
+                    formatted_response = formatter.format_response(
+                        question=request.question,
+                        agent_output=result
                     )
+                    
+                    return QueryResponse(**formatted_response)
         except Exception as e:
             print(f"Direct SQL query failed: {e}")
     
@@ -224,11 +236,15 @@ async def ask_question(request: QueryRequest):
                 sql_tool = next((tool for tool in mysql_tools if "query" in tool.name.lower()), None)
                 if sql_tool:
                     result = sql_tool._run("SELECT p.portfolio_id, p.portfolio_name, pp.cumulative_return FROM portfolios p JOIN portfolio_performance pp ON p.portfolio_id = pp.portfolio_id ORDER BY pp.cumulative_return DESC LIMIT 5")
-                    return QueryResponse(
-                        type="table",
-                        data=result,
-                        metadata={"question": request.question, "method": "direct_sql"}
+                    
+                    # Format the response using ResponseFormatter
+                    formatter = ResponseFormatter()
+                    formatted_response = formatter.format_response(
+                        question=request.question,
+                        agent_output=result
                     )
+                    
+                    return QueryResponse(**formatted_response)
         except Exception as e:
             print(f"Direct SQL performance query failed: {e}")
     

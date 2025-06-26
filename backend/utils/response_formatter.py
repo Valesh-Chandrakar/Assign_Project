@@ -36,6 +36,15 @@ class ResponseFormatter:
         question_lower = question.lower()
         output_lower = output.lower()
         
+        # First check for SQL tuple patterns (always table)
+        if 'datetime.date' in output and 'Decimal' in output and '[(' in output:
+            return "table"
+        
+        # Check for structured data patterns (always table)
+        has_structured_data = bool(re.search(r'Name:|Age:|Value:|Record \d+|--- Record', output))
+        if has_structured_data:
+            return "table"
+        
         # Check for chart indicators
         chart_score = sum(1 for keyword in self.chart_keywords if keyword in question_lower)
         chart_score += sum(1 for keyword in ["top", "best", "worst", "compare", "vs"] if keyword in output_lower)
@@ -44,13 +53,15 @@ class ResponseFormatter:
         table_score = sum(1 for keyword in self.table_keywords if keyword in question_lower)
         table_score += sum(1 for keyword in ["records", "found", "list", "entries"] if keyword in output_lower)
         
-        # Look for structured data patterns
+        # Look for numerical data
         has_numbers = bool(re.search(r'\$[\d,]+|\d+\.\d+%|\d+', output))
-        has_structured_data = bool(re.search(r'Name:|Age:|Value:|Record \d+', output))
         
-        if chart_score > table_score and has_numbers:
+        # Be more strict about charts - need strong chart indicators AND clear numerical data
+        strong_chart_indicators = any(word in question_lower for word in ["distribution", "breakdown", "compare", "vs"])
+        
+        if strong_chart_indicators and has_numbers and chart_score > table_score:
             return "chart"
-        elif table_score > 0 or has_structured_data:
+        elif table_score > 0 or has_numbers or "top" in question_lower:
             return "table"
         else:
             return "text"
@@ -224,8 +235,16 @@ class ResponseFormatter:
                         "Low Price", "Close Price", "Volume", "Adjusted Close", "Created At"
                     ]
                 elif len(data_tuples[0]) == 3:
-                    # Portfolio performance query: portfolio_id, portfolio_name, cumulative_return
-                    columns = ["Portfolio ID", "Portfolio Name", "Cumulative Return"]
+                    # Check if it's performance or value query based on data types
+                    # If third column is < 1, it's likely a return (percentage)
+                    # If third column is > 1000, it's likely a value (dollars)
+                    sample_third_value = float(data_tuples[0][2]) if data_tuples[0][2] is not None else 0
+                    if sample_third_value < 1:
+                        # Portfolio performance query: portfolio_id, portfolio_name, cumulative_return
+                        columns = ["Portfolio ID", "Portfolio Name", "Cumulative Return"]
+                    else:
+                        # Portfolio value query: portfolio_id, portfolio_name, total_value
+                        columns = ["Portfolio ID", "Portfolio Name", "Total Value"]
                 elif len(data_tuples[0]) == 2:
                     # Client value query: name, total_value
                     columns = ["Client Name", "Total Value"]

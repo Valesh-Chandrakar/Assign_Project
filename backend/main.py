@@ -272,12 +272,34 @@ async def ask_question(request: QueryRequest):
     # Portfolio breakup queries (relationship manager, etc.)
     if "breakup" in question_lower or "breakdown" in question_lower:
         if "relationship manager" in question_lower or "manager" in question_lower:
-            # Relationship manager data not available, suggest alternatives
-            return QueryResponse(
-                type="text",
-                data="Relationship manager data is not currently available in the database. However, I can provide portfolio breakdowns by:\n\n• Portfolio Type (Individual, Joint, Corporate, Trust, IRA, 401k)\n• Client Location (City/State)\n• Portfolio Size Ranges\n• Client Risk Profile\n\nWould you like me to show any of these breakdowns instead?",
-                metadata={"question": request.question, "method": "direct_fallback", "suggestion": True}
-            )
+            # Try to get relationship manager data from MongoDB
+            try:
+                mongo_tool = get_mongo_tool()
+                result = mongo_tool._run("Get portfolio values grouped by relationship manager")
+                
+                # If we get data, format it
+                if result and "No matching records" not in result:
+                    formatter = ResponseFormatter()
+                    formatted_response = formatter.format_response(
+                        question=request.question,
+                        agent_output=result
+                    )
+                    return QueryResponse(**formatted_response)
+                else:
+                    # Relationship manager data not available, suggest alternatives
+                    return QueryResponse(
+                        type="text",
+                        data="Relationship manager data is not currently available. To add this data, run:\n\n`cd sample_data && python3 update_mongodb_relationship_managers.py`\n\nAlternatively, I can provide portfolio breakdowns by:\n\n• Portfolio Type (Individual, Joint, Corporate, Trust, IRA, 401k)\n• Client Location (City/State)\n• Portfolio Size Ranges\n• Client Risk Profile\n\nWould you like me to show any of these breakdowns instead?",
+                        metadata={"question": request.question, "method": "direct_fallback", "suggestion": True}
+                    )
+            except Exception as e:
+                print(f"MongoDB relationship manager query failed: {e}")
+                # Fallback to suggestion
+                return QueryResponse(
+                    type="text",
+                    data="Relationship manager data is not currently available. To add this data, run:\n\n`cd sample_data && python3 update_mongodb_relationship_managers.py`\n\nAlternatively, I can provide portfolio breakdowns by:\n\n• Portfolio Type (Individual, Joint, Corporate, Trust, IRA, 401k)\n• Client Location (City/State)\n• Portfolio Size Ranges\n• Client Risk Profile\n\nWould you like me to show any of these breakdowns instead?",
+                    metadata={"question": request.question, "method": "direct_fallback", "suggestion": True}
+                )
         elif "type" in question_lower or "portfolio type" in question_lower:
             # Portfolio breakup by type
             try:

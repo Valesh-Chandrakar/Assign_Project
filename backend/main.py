@@ -101,6 +101,9 @@ def create_query_agent():
     - MongoDB queries: simple English, not JSON
     - SQL queries: clean SQL only
 
+    Available tools: {{tools}}
+    Tool names: {{tool_names}}
+
     Question: {{input}}
 
     {{agent_scratchpad}}

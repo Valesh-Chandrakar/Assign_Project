@@ -91,15 +91,31 @@ def create_query_agent():
     
     # Create agent prompt
     prompt = PromptTemplate.from_template(f"""
-    Answer the question using tools. NEVER provide Final Answer before using a tool.
+    You are a financial data assistant that answers questions using database tools.
 
     CONTEXT: {tool_context}
 
-    RULES:
-    - Use format: Thought: [reasoning] Action: [tool] Action Input: [query only]
-    - WAIT for tool result before Final Answer
-    - MongoDB queries: simple English, not JSON
-    - SQL queries: clean SQL only
+    CRITICAL RULES FOR TOOL USAGE:
+    1. Action Input must contain ONLY the query - NO conversational text
+    2. For SQL queries: provide ONLY the SQL statement
+    3. For MongoDB queries: provide ONLY the search request in simple English
+    4. NEVER add phrases like "Waiting for result" or "Please respond"
+    5. NEVER provide Final Answer until you have tool results
+
+    EXAMPLES:
+    Good: Action Input: SELECT * FROM portfolios LIMIT 5
+    Bad: Action Input: SELECT * FROM portfolios LIMIT 5; (Waiting for result...)
+
+    Good: Action Input: Find clients from New York
+    Bad: Action Input: Find clients from New York (Please let me know the output)
+
+    FORMAT:
+    Thought: I need to query [database] to find [information]
+    Action: [tool_name]
+    Action Input: [query_only_no_extra_text]
+    Observation: [tool_result]
+    Thought: Based on the results...
+    Final Answer: [formatted_answer]
 
     Available tools: {{tools}}
     Tool names: {{tool_names}}
@@ -198,6 +214,23 @@ async def ask_question(request: QueryRequest):
                     )
         except Exception as e:
             print(f"Direct SQL query failed: {e}")
+    
+    # SQL direct queries for best performance portfolios
+    if "best performance" in question_lower or ("top" in question_lower and "performance" in question_lower):
+        try:
+            mysql_tools = get_mysql_tools()
+            if mysql_tools:
+                # Use the SQL query tool directly
+                sql_tool = next((tool for tool in mysql_tools if "query" in tool.name.lower()), None)
+                if sql_tool:
+                    result = sql_tool._run("SELECT p.portfolio_id, p.portfolio_name, pp.cumulative_return FROM portfolios p JOIN portfolio_performance pp ON p.portfolio_id = pp.portfolio_id ORDER BY pp.cumulative_return DESC LIMIT 5")
+                    return QueryResponse(
+                        type="table",
+                        data=result,
+                        metadata={"question": request.question, "method": "direct_sql"}
+                    )
+        except Exception as e:
+            print(f"Direct SQL performance query failed: {e}")
     
     try:
         # Execute the query using the agent

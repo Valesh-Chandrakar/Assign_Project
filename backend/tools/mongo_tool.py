@@ -107,6 +107,52 @@ class MongoQueryTool(BaseTool):
         
         return mongo_query
     
+    def _handle_aggregation_query(self, query: str) -> Optional[List[Dict]]:
+        """Handle aggregation queries like grouping by relationship manager"""
+        query_lower = query.lower()
+        
+        # Relationship manager aggregation
+        if "relationship manager" in query_lower and ("group" in query_lower or "breakdown" in query_lower or "portfolio" in query_lower):
+            pipeline = [
+                {
+                    "$match": {
+                        "relationship_manager": {"$exists": True}
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": "$relationship_manager.name",
+                        "client_count": {"$sum": 1},
+                        "total_portfolio_value": {"$sum": "$account_value"},
+                        "avg_portfolio_value": {"$avg": "$account_value"},
+                        "manager_specialty": {"$first": "$relationship_manager.specialty"}
+                    }
+                },
+                {
+                    "$sort": {"total_portfolio_value": -1}
+                },
+                {
+                    "$project": {
+                        "relationship_manager": "$_id",
+                        "client_count": 1,
+                        "total_portfolio_value": 1,
+                        "avg_portfolio_value": 1,
+                        "manager_specialty": 1,
+                        "_id": 0
+                    }
+                }
+            ]
+            
+            try:
+                collection = self.db["clients"]
+                results = list(collection.aggregate(pipeline))
+                return results
+            except Exception as e:
+                print(f"Aggregation query failed: {e}")
+                return None
+        
+        return None
+    
     def _determine_collection(self, query: str) -> str:
         """Determine which collection to query based on the query content"""
         query_lower = query.lower()
@@ -177,6 +223,11 @@ class MongoQueryTool(BaseTool):
                 print("🔄 MongoDB connection lost, reconnecting...")
                 self._connect()
             
+            # Check if this is an aggregation query first
+            aggregation_results = self._handle_aggregation_query(query)
+            if aggregation_results is not None:
+                return self._format_aggregation_results(aggregation_results, query)
+            
             # Determine collection and parse query
             collection_name = self._determine_collection(query)
             collection = self.db[collection_name]
@@ -210,6 +261,24 @@ class MongoQueryTool(BaseTool):
             return f"MongoDB query error: {str(e)}"
         except Exception as e:
             return f"Error processing query: {str(e)}"
+    
+    def _format_aggregation_results(self, results: List[Dict], query: str) -> str:
+        """Format aggregation results for display"""
+        if not results:
+            return "No matching records found in MongoDB."
+        
+        formatted = f"Portfolio Value Breakdown by Relationship Manager:\n\n"
+        
+        for i, result in enumerate(results, 1):
+            formatted += f"--- Manager {i} ---\n"
+            formatted += f"Name: {result.get('relationship_manager', 'N/A')}\n"
+            formatted += f"Specialty: {result.get('manager_specialty', 'N/A')}\n"
+            formatted += f"Client Count: {result.get('client_count', 0)}\n"
+            formatted += f"Total Portfolio Value: ${result.get('total_portfolio_value', 0):,.2f}\n"
+            formatted += f"Average Portfolio Value: ${result.get('avg_portfolio_value', 0):,.2f}\n"
+            formatted += "\n"
+        
+        return formatted
     
     async def _arun(self, query: str) -> str:
         """Async version of _run"""

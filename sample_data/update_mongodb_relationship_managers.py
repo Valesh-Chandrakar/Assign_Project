@@ -4,8 +4,15 @@ Run this script to enhance your MongoDB data with relationship manager informati
 """
 
 import os
+import sys
 from pymongo import MongoClient
 import random
+from dotenv import load_dotenv
+
+# Load .env file from backend directory
+backend_path = os.path.join(os.path.dirname(__file__), '..', 'backend')
+env_path = os.path.join(backend_path, '.env')
+load_dotenv(env_path)
 
 # MongoDB connection
 MONGODB_URI = os.getenv("MONGODB_URI")

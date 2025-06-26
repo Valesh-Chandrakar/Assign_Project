@@ -37,12 +37,12 @@ def update_clients_with_relationship_managers():
     try:
         # Connect to MongoDB
         print("🔌 Connecting to MongoDB Atlas...")
-        client = MongoClient(MONGODB_URI)
-        client.admin.command('ping')
+        mongo_client = MongoClient(MONGODB_URI)
+        mongo_client.admin.command('ping')
         print("✅ Connected successfully")
         
         # Access database and collection
-        db = client[DATABASE_NAME]
+        db = mongo_client[DATABASE_NAME]
         clients_collection = db[COLLECTION_NAME]
         
         # Get all clients
@@ -110,7 +110,7 @@ def update_clients_with_relationship_managers():
         for result in clients_collection.aggregate(pipeline):
             print(f"   {result['_id']}: {result['client_count']} clients, ${result['total_assets']:,} total assets")
         
-        client.close()
+        mongo_client.close()
         print("\n🎉 MongoDB relationship manager update complete!")
         
     except Exception as e:

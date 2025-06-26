@@ -91,36 +91,15 @@ def create_query_agent():
     
     # Create agent prompt
     prompt = PromptTemplate.from_template(f"""
-    You are a financial data analyst. Answer questions using the available tools.
+    Answer the question using tools. NEVER provide Final Answer before using a tool.
 
     CONTEXT: {tool_context}
 
-    CRITICAL RULES:
-    1. Use EXACT format: Thought: [reasoning] Action: [tool] Action Input: [ONLY the input, NO extra text]
-    2. Action Input must contain ONLY the query/input - NO conversational text
-    3. For SQL: Action Input must be pure SQL - no explanations or extra text
-    4. For MongoDB: Action Input must be the search query only
-    5. After tool results, immediately give Final Answer
-
-    CORRECT EXAMPLES:
-    Thought: I need to find top clients by portfolio value
-    Action: sql_db_query
-    Action Input: SELECT client_id, total_value FROM portfolios ORDER BY total_value DESC LIMIT 5
-
-    Thought: I need to check the portfolios table structure
-    Action: sql_db_schema
-    Action Input: portfolios
-
-    Thought: I need to find clients in New York
-    Action: mongodb_query
-    Action Input: Find clients from New York
-
-    WRONG - DO NOT DO THIS:
-    Action Input: SELECT ... (Please let me know the output)
-    Action Input: portfolios (Please provide schema)
-
-    Available tools: {{tools}}
-    Tool names: {{tool_names}}
+    RULES:
+    - Use format: Thought: [reasoning] Action: [tool] Action Input: [query only]
+    - WAIT for tool result before Final Answer
+    - MongoDB queries: simple English, not JSON
+    - SQL queries: clean SQL only
 
     Question: {{input}}
 
@@ -186,6 +165,19 @@ async def ask_question(request: QueryRequest):
             )
         except Exception as e:
             print(f"Direct MongoDB query failed: {e}")
+    
+    # Age distribution queries
+    if "age" in question_lower and ("distribution" in question_lower or "group" in question_lower):
+        try:
+            mongo_tool = get_mongo_tool()
+            result = mongo_tool._run("Show age distribution of clients")
+            return QueryResponse(
+                type="table" if "Record" in result else "text",
+                data=result,
+                metadata={"question": request.question, "method": "direct_mongo", "suggested_type": "chart"}
+            )
+        except Exception as e:
+            print(f"Direct age distribution query failed: {e}")
     
     # SQL direct queries for portfolios
     if "top" in question_lower and ("client" in question_lower or "portfolio" in question_lower) and "equity" in question_lower:

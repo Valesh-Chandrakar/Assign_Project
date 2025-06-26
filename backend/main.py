@@ -91,20 +91,30 @@ def create_query_agent():
     
     # Create agent prompt
     prompt = PromptTemplate.from_template(f"""
-    You are a financial data analyst assistant. Answer the user's question using the available tools.
+    You are a financial data analyst. Answer questions using ONLY the available tools.
 
     CONTEXT: {tool_context}
 
-    TOOL SELECTION:
-    - Use mongodb_query for: client info, demographics, locations, risk profiles
-    - Use SQL tools for: portfolio values, transactions, holdings, performance
+    RULES:
+    1. ALWAYS use this exact format:
+       Thought: [what you need to do]
+       Action: [exact tool name from list]
+       Action Input: [your query/input]
+    2. After getting tool results, provide Final Answer
+    3. Use tools ONLY from this list: {{tool_names}}
+    4. For SQL queries, use sql_db_query tool
+    5. For client info, use mongodb_query tool
 
-    INSTRUCTIONS:
-    1. Choose the RIGHT tool for the question
-    2. Use the tool ONCE with a clear query
-    3. Format the response based on the data returned
-    4. If no data found, say so clearly
-    5. Be concise and direct
+    EXAMPLES:
+    Question: "Show me top 5 clients"
+    Thought: I need to query the database for top clients by value
+    Action: sql_db_query
+    Action Input: SELECT client_id, total_value FROM portfolios ORDER BY total_value DESC LIMIT 5
+
+    Question: "Find clients from New York"
+    Thought: I need to search MongoDB for clients in New York
+    Action: mongodb_query  
+    Action Input: Find clients from New York
 
     Available tools: {{tools}}
     Tool names: {{tool_names}}
@@ -120,9 +130,9 @@ def create_query_agent():
         tools=tools, 
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=5,
-        max_execution_time=30,
-        early_stopping_method="generate"
+        max_iterations=10,
+        max_execution_time=60,
+        early_stopping_method="force"
     )
     
     return agent_executor
@@ -158,6 +168,20 @@ async def ask_question(request: QueryRequest):
     if not agent_executor:
         raise HTTPException(status_code=500, detail="Agent not initialized")
     
+    # Simple fallback for common queries to avoid agent parsing issues
+    question_lower = request.question.lower()
+    if "clients from new york" in question_lower or "new york clients" in question_lower:
+        try:
+            mongo_tool = get_mongo_tool()
+            result = mongo_tool._run("Find clients from New York")
+            return QueryResponse(
+                type="table" if "Record" in result else "text",
+                data=result,
+                metadata={"question": request.question, "method": "direct_mongo"}
+            )
+        except Exception as e:
+            print(f"Direct MongoDB query failed: {e}")
+    
     try:
         # Execute the query using the agent
         result = agent_executor.invoke({"input": request.question})
@@ -176,16 +200,24 @@ async def ask_question(request: QueryRequest):
         return QueryResponse(**formatted_response)
         
     except ValueError as e:
-        if "Agent stopped due to iteration limit" in str(e):
+        error_msg = str(e)
+        if "Agent stopped due to iteration limit" in error_msg or "Invalid Format" in error_msg or "not a valid tool" in error_msg:
             return QueryResponse(
                 type="text",
-                data="I'm having trouble processing this query. Could you try rephrasing it or being more specific? For example: 'Show me clients from New York' or 'List top 5 portfolios by value'",
-                metadata={"error": "iteration_limit", "question": request.question}
+                data="I'm having trouble processing this query. Could you try rephrasing it more simply? For example: 'Show me clients from New York' or 'List top 5 portfolios by value'",
+                metadata={"error": "agent_parsing_error", "question": request.question}
             )
         else:
             raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
     except Exception as e:
         print(f"Query execution error: {e}")
+        error_str = str(e)
+        if "not a valid tool" in error_str or "Invalid Format" in error_str:
+            return QueryResponse(
+                type="text", 
+                data="I'm having trouble understanding your request. Please try a simpler question like 'Find clients from New York' or 'Show top portfolios'",
+                metadata={"error": "tool_error", "question": request.question}
+            )
         raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")
 
 @app.get("/examples")

@@ -126,6 +126,12 @@ class ResponseFormatter:
         """Extract structured table data from text output"""
         rows = []
         
+        # Pattern 0: Raw SQL query results (tuples)
+        if 'datetime.date' in output and 'Decimal' in output and '[(' in output:
+            rows = self._parse_sql_tuples(output)
+            if rows:
+                return rows
+        
         # Pattern 1: Record-based format (MongoDB style)
         record_pattern = r'--- Record \d+ ---\n(.*?)(?=--- Record \d+ ---|$)'
         records = re.findall(record_pattern, output, re.DOTALL)
@@ -171,6 +177,87 @@ class ResponseFormatter:
                         row[key.strip()] = value.strip()
                     if row:
                         rows.append(row)
+        
+        return rows
+    
+    def _parse_sql_tuples(self, output: str) -> List[Dict[str, Any]]:
+        """Parse raw SQL query results from tuple format"""
+        rows = []
+        
+        try:
+            # Extract the list of tuples from the output
+            tuple_start = output.find('[')
+            tuple_end = output.rfind(']') + 1
+            if tuple_start == -1 or tuple_end == 0:
+                return rows
+            
+            tuple_str = output[tuple_start:tuple_end]
+            
+            # Try to safely evaluate the string as Python data
+            # This is risky in general but controlled in this context
+            import ast
+            from datetime import datetime, date
+            from decimal import Decimal
+            
+            # Replace the problematic parts for parsing
+            tuple_str = tuple_str.replace('datetime.date', 'date')
+            tuple_str = tuple_str.replace('datetime.datetime', 'datetime')
+            tuple_str = tuple_str.replace('Decimal(', 'float(')
+            
+            try:
+                # Parse the tuples
+                data_tuples = eval(tuple_str, {
+                    "date": date,
+                    "datetime": datetime,
+                    "Decimal": Decimal,
+                    "float": float
+                })
+                
+                if not data_tuples:
+                    return rows
+                
+                # Determine column names based on context
+                # For market_data table based on the structure seen
+                if len(data_tuples[0]) == 10:
+                    columns = [
+                        "ID", "Security ID", "Date", "Open Price", "High Price", 
+                        "Low Price", "Close Price", "Volume", "Adjusted Close", "Created At"
+                    ]
+                else:
+                    # Generic column names
+                    columns = [f"Column {i+1}" for i in range(len(data_tuples[0]))]
+                
+                # Convert tuples to dictionaries
+                for row_tuple in data_tuples:
+                    row_dict = {}
+                    for i, value in enumerate(row_tuple):
+                        column_name = columns[i] if i < len(columns) else f"Column {i+1}"
+                        
+                        # Format the value appropriately
+                        if value is None:
+                            formatted_value = "N/A"
+                        elif isinstance(value, (Decimal, float)) and "Price" in column_name:
+                            formatted_value = f"${float(value):,.2f}"
+                        elif isinstance(value, (Decimal, float)):
+                            formatted_value = f"{float(value):,.2f}"
+                        elif isinstance(value, (date, datetime)):
+                            formatted_value = value.strftime("%Y-%m-%d")
+                        elif isinstance(value, int) and "Volume" in column_name:
+                            formatted_value = f"{value:,}"
+                        else:
+                            formatted_value = str(value)
+                        
+                        row_dict[column_name] = formatted_value
+                    
+                    rows.append(row_dict)
+                    
+            except (SyntaxError, ValueError, NameError) as e:
+                print(f"Error parsing SQL tuples: {e}")
+                return []
+                
+        except Exception as e:
+            print(f"Error processing SQL tuples: {e}")
+            return []
         
         return rows
     
